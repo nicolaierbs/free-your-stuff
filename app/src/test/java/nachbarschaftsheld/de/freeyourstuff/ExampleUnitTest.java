@@ -1,4 +1,4 @@
-package nachbarschaftsheld.de.freeyourstuff;
+package de.nachbarschaftsheld.freeyourstuff;
 
 import org.junit.Test;
 

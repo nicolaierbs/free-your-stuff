@@ -1,9 +1,13 @@
-package nachbarschaftsheld.de.freeyourstuff;
+package de.nachbarschaftsheld.freeyourstuff;
 
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.design.widget.FloatingActionButton;
@@ -32,13 +36,20 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 
+import de.nachbarschaftsheld.freeyourstuff.R;
+
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemClickListener, SwipeRefreshLayout.OnRefreshListener {
+
+    public static final String TAG = "freeyourstuff";
 
     private static final String PREFS = "prefs";
     private static final String PREF_NAME = "username";
-    SharedPreferences mSharedPreferences;
 
-    private static final String QUERY_URL = "http://130.83.104.54:8080/freeyourstuff/rest/freeyourstuff/data/get";
+
+//    public static final String QUERY_URL = "http://192.168.0.102:8080/freeyourstuff/rest/";
+    public static final String QUERY_URL = "http://54.93.62.108:8080/freeyourstuff/rest/";
+
+    public static Location currentLocation;
 
     private static String username;
 
@@ -50,12 +61,22 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
     JSONAdapter mJSONAdapter;
 
+    LocationManager locationManager;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        //Organize Location Manager
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        LocationListener locationListener = new NachbarschaftsLocationListener(this);
+        locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER, 300000, 100, locationListener);
+        currentLocation = getLastBestLocation();
+        Log.i(TAG, "Location: " + currentLocation.toString());
 
         swipeView = (SwipeRefreshLayout) findViewById(R.id.swipe_refresh_layout);
         swipeView.setOnRefreshListener(this);
@@ -66,9 +87,8 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Add another item", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+            public void onClick(View v) {
+                addNewItem();
             }
         });
 
@@ -84,13 +104,20 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         mainListView.setOnItemClickListener(this);
         mainListView.setAdapter(mJSONAdapter);
 
-        queryItems("Moby Dick");
+        queryItems(currentLocation);
     }
 
-     public void displayWelcome() {
+    private void addNewItem() {
+
+        Intent addNewItemIntent = new Intent(this, AddItemActivity.class);
+        addNewItemIntent.putExtra("username", username);
+        startActivity(addNewItemIntent);
+    }
+
+    public void displayWelcome() {
 
         // Access the device's key-value storage
-        mSharedPreferences = getSharedPreferences(PREFS, MODE_PRIVATE);
+         final SharedPreferences mSharedPreferences = getSharedPreferences(PREFS, MODE_PRIVATE);
 
         // Read the user's name,
         // or an empty string if nothing found
@@ -126,7 +153,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                     e.commit();
 
                     // Welcome the new user
-                    Toast.makeText(getApplicationContext(), "Welcome, " + username + "!", Toast.LENGTH_LONG).show();
+                    Toast.makeText(getApplicationContext(), "Welcome, " + username, Toast.LENGTH_LONG).show();
                 }
             });
 
@@ -163,18 +190,13 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         return super.onOptionsItemSelected(item);
     }
 
-    private void queryItems(String searchString) {
+    private void queryItems(Location location) {
 
-        // Prepare your search string to be put in a URL
-        // It might have reserved characters or something
-        String urlString = "";
-        try {
-            urlString = URLEncoder.encode(searchString, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-
-            // if this fails for some reason, let the user know why
-            e.printStackTrace();
-            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        double latitude=0;
+        double longitude=0;
+        if(location!=null){
+            latitude = location.getLatitude();
+            longitude = location.getLongitude();
         }
 
         // Create a client to perform networking
@@ -185,10 +207,9 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
         // Have the client get a JSONArray of data
         // and define how to respond
-        Log.i("freeyourstuff",QUERY_URL);
-        //client.get(QUERY_URL + urlString,
-        client.get(QUERY_URL,
-                        new JsonHttpResponseHandler() {
+        Log.i(TAG, QUERY_URL + "query?lat=" + latitude + "&lon=" + longitude);
+        client.get(QUERY_URL + "query?lat=" + latitude + "&lon=" + longitude,
+                new JsonHttpResponseHandler() {
 
                     @Override
                     public void onSuccess(JSONArray jsonArray) {
@@ -196,8 +217,8 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                         mDialog.dismiss();
                         // Display a "Toast" message
                         // to announce your success
-                        Toast.makeText(getApplicationContext(), "Items updated!",Toast.LENGTH_LONG).show();
-                        Log.d("freeyourstuff", jsonArray.toString());
+                        Toast.makeText(getApplicationContext(), "Items updated!", Toast.LENGTH_LONG).show();
+                        Log.d(TAG, jsonArray.toString());
 
                         mJSONAdapter.updateData(jsonArray);
                     }
@@ -212,7 +233,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
                         // Log error message
                         // to help solve any problems
-                        Log.e("omg android", statusCode + " " + throwable.getMessage());
+                        Log.e(TAG, statusCode + " " + throwable.getMessage());
                     }
                 });
     }
@@ -221,18 +242,26 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         // 12. Now that the user's chosen a book, grab the cover data
         JSONObject jsonObject = (JSONObject) mJSONAdapter.getItem(position);
-        String coverID = jsonObject.optString("cover_i","");
-        String summary = jsonObject.optString("summary","");
-        String description = jsonObject.optString("description","");
 
 // create an Intent to take you over to a new DetailActivity
         Intent detailIntent = new Intent(this, DetailActivity.class);
 
 // pack away the data about the cover
 // into your Intent before you head out
+        String coverID = jsonObject.optString("cover_i","");
         detailIntent.putExtra("coverID", coverID);
+
+        String user = jsonObject.optString("user","");
+        detailIntent.putExtra("user", user);
+
+        String summary = jsonObject.optString("summary","");
         detailIntent.putExtra("summary", summary);
+
+        String description = jsonObject.optString("description","");
         detailIntent.putExtra("description", description);
+
+        String type = jsonObject.optString("type","");
+        detailIntent.putExtra("type", type);
 
 // start the next Activity using your prepared Intent
         startActivity(detailIntent);
@@ -240,8 +269,36 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
     @Override
     public void onRefresh() {
-        Log.i("freeyourstuff", "Swyping refresh");
-        queryItems("Jane Austen");
+        Log.i(TAG, "Swyping refresh");
+        queryItems(currentLocation);
         swipeView.setRefreshing(false);
+    }
+
+    private Location getLastBestLocation() {
+        Location locationGPS = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        Location locationNet = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+
+        long GPSLocationTime = 0;
+        if (null != locationGPS) { GPSLocationTime = locationGPS.getTime(); }
+
+        long NetLocationTime = 0;
+
+        if (null != locationNet) {
+            NetLocationTime = locationNet.getTime();
+        }
+
+        Location location;
+        if ( 0 < GPSLocationTime - NetLocationTime ) {
+            location = locationGPS;
+        }
+        else {
+            location = locationNet;
+        }
+        if(location==null){
+            location = new Location("Standard");
+            location.setLongitude(0.0);
+            location.setLatitude(0.0);
+        }
+        return location;
     }
 }

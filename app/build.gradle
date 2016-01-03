@@ -5,11 +5,11 @@ android {
     buildToolsVersion "23.0.2"
 
     defaultConfig {
-        applicationId "nachbarschaftsheld.de.freeyourstuff"
-        minSdkVersion 19
+        applicationId "de.nachbarschaftsheld.freeyourstuff"
+        minSdkVersion 16
         targetSdkVersion 22
-        versionCode 1
-        versionName "1.0"
+        versionCode 8
+        versionName "1.2.4"
     }
     buildTypes {
         release {
@@ -28,4 +28,5 @@ dependencies {
     // there may or may not be a support library above these
     compile 'com.loopj.android:android-async-http:1.4.4'
     compile 'com.squareup.picasso:picasso:2.1.1'
+    compile 'org.apache.commons:commons-io:1.3.2'
 }
